@@ -50,6 +50,9 @@ pub struct SysCache {
     cpu_name: String,
     /// Skip nvidia-smi after it fails once (no NVIDIA GPU / driver).
     gpu_available: bool,
+    /// Last GPU reading and CPU temperature, reused by light polls (bar only, no card open).
+    last_gpu: Option<GpuStats>,
+    last_temp: (Option<f32>, &'static str),
 }
 
 pub struct SysState(pub Arc<Mutex<SysCache>>);
@@ -79,16 +82,22 @@ impl SysCache {
             last: Instant::now(),
             cpu_name,
             gpu_available: true,
+            last_gpu: None,
+            last_temp: (None, "off"),
         }
     }
 
     /// `lhm_url` is Some when the LibreHardwareMonitor integration is switched on.
-    pub fn collect(&mut self, lhm_url: Option<&str>) -> SystemStats {
+    /// `full` = the CPU card is open: also read the GPU (nvidia-smi) and temperatures. Light polls
+    /// (just the bar's CPU graph) skip those and repeat the last values.
+    pub fn collect(&mut self, lhm_url: Option<&str>, full: bool) -> SystemStats {
         self.sys.refresh_cpu_usage();
         self.sys.refresh_memory();
         self.networks.refresh();
-        self.disks.refresh();
-        self.components.refresh();
+        if full {
+            self.disks.refresh();
+            self.components.refresh();
+        }
 
         let elapsed = self.last.elapsed().as_secs_f64().max(0.001);
         self.last = Instant::now();
@@ -113,28 +122,20 @@ impl SysCache {
             None => ("–".into(), 0, 0),
         };
 
-        let sysinfo_temp = self
-            .components
-            .iter()
-            .filter(|c| {
-                let l = c.label().to_lowercase();
-                l.contains("cpu") || l.contains("package") || l.contains("tctl") || l.contains("core")
-            })
-            .map(|c| c.temperature())
-            .filter(|t| t.is_finite() && *t > 0.0)
-            .reduce(f32::max);
-
-        let (cpu_temp, temp_source) = match lhm_url {
-            Some(url) => match lhm_cpu_temp(url) {
-                Some(t) => (Some(t), "lhm"),
-                None => (sysinfo_temp, "unreachable"),
-            },
-            None => (sysinfo_temp, "off"),
+        let (cpu_temp, temp_source) = if full {
+            let t = self.read_temp(lhm_url);
+            self.last_temp = t;
+            t
+        } else {
+            self.last_temp
         };
 
-        let gpu = if self.gpu_available {
+        let gpu = if !full {
+            self.last_gpu.clone()
+        } else if self.gpu_available {
             let g = nvidia_smi();
             self.gpu_available = g.is_some();
+            self.last_gpu = g.clone();
             g
         } else {
             None
@@ -154,6 +155,27 @@ impl SysCache {
             net_up: tx as f64 / elapsed,
             uptime_secs: System::uptime(),
             gpu,
+        }
+    }
+
+    fn read_temp(&mut self, lhm_url: Option<&str>) -> (Option<f32>, &'static str) {
+        let sysinfo_temp = self
+            .components
+            .iter()
+            .filter(|c| {
+                let l = c.label().to_lowercase();
+                l.contains("cpu") || l.contains("package") || l.contains("tctl") || l.contains("core")
+            })
+            .map(|c| c.temperature())
+            .filter(|t| t.is_finite() && *t > 0.0)
+            .reduce(f32::max);
+
+        match lhm_url {
+            Some(url) => match lhm_cpu_temp(url) {
+                Some(t) => (Some(t), "lhm"),
+                None => (sysinfo_temp, "unreachable"),
+            },
+            None => (sysinfo_temp, "off"),
         }
     }
 }

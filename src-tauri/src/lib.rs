@@ -1,5 +1,7 @@
 mod audio;
 mod audio_types;
+mod bar;
+mod calendar;
 mod commands;
 mod config;
 mod media;
@@ -14,7 +16,15 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            commands::resize_notch,
+            commands::bar_resize,
+            commands::bar_set_hold,
+            commands::bar_peek,
+            commands::bar_dismiss,
+            commands::timer_alarms,
+            commands::bar_visible,
+            commands::open_target,
+            commands::quit_app,
+            commands::calendar_events,
             commands::get_config,
             commands::set_config,
             commands::get_suspend,
@@ -33,10 +43,13 @@ pub fn run() {
             app.manage(config::ConfigState::load(&handle));
             app.manage(suspend::SuspendState::default());
             app.manage(system::SysState::default());
+            app.manage(bar::BarState::default());
+            app.manage(calendar::CalState::default());
 
-            window::init(&handle)?;
+            bar::init(&handle)?;
             window::build_tray(app)?;
-            suspend::spawn_watcher(handle);
+            suspend::spawn_watcher(handle.clone());
+            bar::spawn_watcher(handle);
             Ok(())
         })
         .run(tauri::generate_context!())

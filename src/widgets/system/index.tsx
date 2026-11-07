@@ -1,6 +1,9 @@
 import { call } from '../../core/ipc';
 import { createStore, useStore } from '../../core/store';
-import type { WidgetDef } from '../../core/types';
+import type { CardProps, ChipProps, WidgetDef } from '../../core/types';
+import { Card, Spark } from '../../core/Card';
+import { IconCpu } from '../../core/icons';
+import { openTarget } from '../../core/ipc';
 
 interface GpuStats {
   name: string;
@@ -26,11 +29,23 @@ interface SystemStats {
   gpu: GpuStats | null;
 }
 
-const store = createStore<SystemStats | null>(null);
+/** Latest reading plus the last ~2 minutes of CPU % for the graphs. */
+interface SysState {
+  stats: SystemStats | null;
+  history: number[];
+}
+
+const HISTORY = 60;
+const store = createStore<SysState>({ stats: null, history: [] });
+
+/** GPU (nvidia-smi) and temperatures are only read while the card is open. */
+let full = false;
 
 async function tick() {
-  const stats = await call<SystemStats | null>('system_stats');
-  if (stats) store.set(stats);
+  const stats = await call<SystemStats | null>('system_stats', { full });
+  if (!stats) return;
+  const history = [...store.get().history, stats.cpu].slice(-HISTORY);
+  store.set({ stats, history });
 }
 
 const GB = 1024 ** 3;
@@ -49,102 +64,98 @@ function uptime(s: number) {
   return d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`;
 }
 
-function tone(pct: number) {
-  if (pct >= 90) return 'var(--hot)';
-  if (pct >= 70) return 'var(--warm)';
-  return 'var(--cool)';
-}
-
 function cpuTempLabel(s: SystemStats) {
   if (s.cpuTemp !== null) return `${Math.round(s.cpuTemp)}°C`;
-  return s.tempSource === 'unreachable' ? 'LHM offline' : 'temp off';
+  return s.tempSource === 'unreachable' ? 'LHM offline' : null;
 }
 
-function Ring({ label, pct, detail }: { label: string; pct: number | null; detail: string }) {
-  const r = 24;
-  const c = 2 * Math.PI * r;
-  const v = pct === null ? 0 : Math.min(100, Math.max(0, pct));
+/** "AMD Ryzen 7 5800X 8-Core Processor" -> "AMD Ryzen 7 5800X" */
+const shortCpu = (name: string) => name.replace(/\s+\d+-Core Processor$/i, '').replace(/\(R\)|\(TM\)|CPU @.*$/gi, '').trim();
+
+function Chip({ open }: ChipProps) {
+  const { stats, history } = useStore(store);
   return (
-    <div className="ring">
-      <svg width="62" height="62" viewBox="0 0 62 62">
-        <circle cx="31" cy="31" r={r} className="ring-track" />
-        <circle
-          cx="31"
-          cy="31"
-          r={r}
-          className="ring-value"
-          stroke={tone(v)}
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - v / 100)}
-          transform="rotate(-90 31 31)"
-        />
-        <text x="31" y="35" textAnchor="middle" className="ring-text">
-          {pct === null ? '–' : `${Math.round(v)}%`}
-        </text>
-      </svg>
-      <div className="ring-label">{label}</div>
-      <div className="ring-detail">{detail}</div>
+    <span className={`chip cpu-chip${open ? ' on' : ''}`}>
+      <span className="spark-box">
+        <Spark values={history.length > 1 ? history : [0, 0]} width={30} height={12} />
+      </span>
+      <span className="cpu-label">
+        <b>CPU</b>
+        <span className="num">{stats ? `${Math.round(stats.cpu)}%` : '–'}</span>
+      </span>
+    </span>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="kv">
+      <span className="muted">{label}</span>
+      <span>{value}</span>
     </div>
   );
 }
 
-function Panel() {
-  const s = useStore(store);
-  if (!s) return <div className="muted small pad">Reading sensors…</div>;
-
-  const ramPct = (s.ramUsed / s.ramTotal) * 100;
-  const diskPct = s.diskTotal > 0 ? (s.diskUsed / s.diskTotal) * 100 : 0;
-  const gpu = s.gpu;
-
+function CpuCard({ openSettings }: CardProps) {
+  const { stats: s, history } = useStore(store);
+  const temp = s ? cpuTempLabel(s) : null;
   return (
-    <div className="system">
-      <div className="rings">
-        <Ring label="CPU" pct={s.cpu} detail={cpuTempLabel(s)} />
-        <Ring label="RAM" pct={ramPct} detail={`${gb(s.ramUsed)} / ${gb(s.ramTotal)} GB`} />
-        <Ring
-          label="GPU"
-          pct={gpu ? gpu.util : null}
-          detail={gpu ? `${gpu.temp !== null ? `${Math.round(gpu.temp)}°C · ` : ''}${gb(gpu.memUsed)}/${gb(gpu.memTotal)} GB` : 'not detected'}
-        />
-      </div>
-      <div className="stats">
-        <div className="stat">
-          <span className="muted">Disk {s.diskName}</span>
-          <div className="bar">
-            <div style={{ width: `${diskPct}%`, background: tone(diskPct) }} />
-          </div>
+    <Card
+      icon={<IconCpu size={15} />}
+      tone="blue"
+      title="CPU"
+      subtitle={s ? shortCpu(s.cpuName) : 'Reading sensors…'}
+      value={s ? Math.round(s.cpu) : '–'}
+      unit={s ? '%' : undefined}
+      action={{ label: 'Task Manager', onClick: () => openTarget('taskmgr') }}
+      openSettings={openSettings}
+    >
+      <div className="panel graph-panel">
+        <Spark values={history.length > 1 ? history : [0, 0]} width={268} height={58} area />
+        <div className="graph-legend">
           <span>
-            {gb(s.diskUsed)} / {gb(s.diskTotal)} GB
+            <i className="dot blue" /> Usage <b>{s ? `${Math.round(s.cpu)}%` : '–'}</b>
           </span>
-        </div>
-        <div className="stat">
-          <span className="muted">Network</span>
-          <span>
-            ↓ {rate(s.netDown)} &nbsp; ↑ {rate(s.netUp)}
-          </span>
-        </div>
-        <div className="stat">
-          <span className="muted">Uptime</span>
-          <span>{uptime(s.uptimeSecs)}</span>
-        </div>
-        <div className="stat cpu-name muted" title={gpu ? `${s.cpuName} · ${gpu.name}` : s.cpuName}>
-          {s.cpuName}
-          {gpu ? ` · ${gpu.name}` : ''}
+          {temp && (
+            <span>
+              Temp <b>{temp}</b>
+            </span>
+          )}
+          <span className="muted">2 min</span>
         </div>
       </div>
-    </div>
+      {s && (
+        <div className="panel">
+          <Row label="Memory" value={`${gb(s.ramUsed)} of ${gb(s.ramTotal)} GB`} />
+          {s.gpu && (
+            <Row
+              label="GPU"
+              value={`${Math.round(s.gpu.util)}%${s.gpu.temp !== null ? ` · ${Math.round(s.gpu.temp)}°C` : ''} · ${gb(s.gpu.memUsed)}/${gb(s.gpu.memTotal)} GB`}
+            />
+          )}
+          <Row label="Network" value={`↓ ${rate(s.netDown)}  ↑ ${rate(s.netUp)}`} />
+          <Row label={`Disk ${s.diskName}`} value={`${gb(s.diskUsed)} of ${gb(s.diskTotal)} GB`} />
+          <Row label="Up for" value={uptime(s.uptimeSecs)} />
+        </div>
+      )}
+    </Card>
   );
 }
 
 export const systemWidget: WidgetDef = {
   id: 'system',
-  title: 'System',
-  order: 20,
-  span: 2,
-  Panel,
+  title: 'CPU',
+  order: 30,
+  slot: 'right',
+  Chip,
+  Card: CpuCard,
+  cardWidth: 300,
   poll: {
-    // Only poll while the notch is open.
-    interval: ({ expanded, suspended }) => (expanded && !suspended ? 2000 : null),
+    // Only while the bar is on screen.
+    interval: ({ visible, openCard, suspended, game }) => {
+      full = openCard === 'system';
+      return suspended || !visible ? null : full ? 1500 : game ? 4000 : 2000;
+    },
     tick,
   },
 };

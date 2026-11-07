@@ -1,7 +1,9 @@
 import { type CSSProperties, type MouseEvent, useEffect, useState } from 'react';
 import { call } from '../../core/ipc';
 import { createStore, useStore } from '../../core/store';
-import type { PanelProps, WidgetDef } from '../../core/types';
+import type { CardProps, ChipProps, WidgetDef } from '../../core/types';
+import { Card } from '../../core/Card';
+import { openTarget } from '../../core/ipc';
 import { IconMusic, IconNext, IconPause, IconPlay, IconPrev } from '../../core/icons';
 import { DEFAULT_ACCENT, extractAccent } from './accent';
 
@@ -96,22 +98,20 @@ function prettySource(id: string) {
 
 const accentStyle = (accent: string) => ({ '--accent': accent }) as CSSProperties;
 
-function Compact() {
+function Chip({ open }: ChipProps) {
   const s = useStore(store);
   if (!s.info) {
     return (
-      <div className="m-compact idle">
-        <span className="m-thumb empty">
-          <IconMusic size={12} />
-        </span>
-        <span className="m-ctitle muted">Nothing playing</span>
-      </div>
+      <span className={`chip media-chip idle${open ? ' on' : ''}`}>
+        <IconMusic size={12} />
+        <span className="muted">Nothing playing</span>
+      </span>
     );
   }
   return (
-    <div className="m-compact" style={accentStyle(s.accent)}>
+    <span className={`chip media-chip${open ? ' on' : ''}`} style={accentStyle(s.accent)}>
       <span className="m-thumb" style={s.art ? { backgroundImage: `url("${s.art}")` } : undefined}>
-        {!s.art && <IconMusic size={12} />}
+        {!s.art && <IconMusic size={10} />}
       </span>
       <span className={`m-ctitle${s.info.playing ? '' : ' paused'}`}>
         {s.info.title}
@@ -123,27 +123,28 @@ function Compact() {
         <i />
         <i />
       </span>
-    </div>
+    </span>
   );
 }
 
-function Panel({ expanded }: PanelProps) {
+function MusicCard({ openSettings }: CardProps) {
   const s = useStore(store);
   const [now, setNow] = useState(Date.now());
   const playing = !!s.info?.playing;
 
-  // Smooth progress between polls, only while visible and playing.
+  // Smooth progress between polls while playing.
   useEffect(() => {
-    if (!expanded || !playing) return;
+    if (!playing) return;
     setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
-  }, [expanded, playing]);
+  }, [playing]);
 
   const info = s.info;
   const pos = livePosition(s, Math.max(now, s.fetchedAt));
   const dur = info?.durationMs ?? 0;
   const pct = dur > 0 ? (pos / dur) * 100 : 0;
+  const isSpotify = !info || prettySource(info.source) === 'Spotify';
 
   const seek = (e: MouseEvent<HTMLDivElement>) => {
     if (!info || dur <= 0) return;
@@ -153,17 +154,28 @@ function Panel({ expanded }: PanelProps) {
   };
 
   return (
-    <div className="media" style={accentStyle(s.accent)}>
-      <div className="m-art" style={s.art ? { backgroundImage: `url("${s.art}")` } : undefined}>
-        {!s.art && <IconMusic size={30} />}
-      </div>
-      <div className="m-meta">
-        <div className="m-source">{info ? prettySource(info.source) : 'Media'}</div>
-        <div className="m-title" title={info?.title}>
-          {info?.title || 'Nothing playing'}
-        </div>
-        <div className="m-artist" title={info?.artist}>
-          {info ? info.artist || info.album : 'Start something in Spotify'}
+    <Card
+      icon={<IconMusic size={15} />}
+      tone="red"
+      title="Now playing"
+      subtitle={info ? prettySource(info.source) : 'Nothing playing'}
+      action={isSpotify ? { label: 'Open Spotify', onClick: () => openTarget('spotify') } : undefined}
+      openSettings={openSettings}
+    >
+      <div className="panel media" style={accentStyle(s.accent)}>
+        <div className="m-row">
+          <div className="m-art" style={s.art ? { backgroundImage: `url("${s.art}")` } : undefined}>
+            {!s.art && <IconMusic size={22} />}
+          </div>
+          <div className="m-meta">
+            <div className="m-title" title={info?.title}>
+              {info?.title || 'Nothing playing'}
+            </div>
+            <div className="m-artist" title={info?.artist}>
+              {info ? info.artist || info.album : 'Start something in Spotify'}
+            </div>
+            {info?.album && info.artist && <div className="m-album muted">{info.album}</div>}
+          </div>
         </div>
 
         <div className={`m-progress${dur > 0 ? '' : ' disabled'}`} onClick={seek}>
@@ -171,7 +183,7 @@ function Panel({ expanded }: PanelProps) {
         </div>
         <div className="m-times">
           <span>{fmt(pos)}</span>
-          <span>{dur > 0 ? fmt(dur) : '--:--'}</span>
+          <span>{dur > 0 ? `-${fmt(dur - pos)}` : '--:--'}</span>
         </div>
 
         <div className="m-controls">
@@ -186,20 +198,22 @@ function Panel({ expanded }: PanelProps) {
           </button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
 export const mediaWidget: WidgetDef = {
   id: 'media',
-  title: 'Now playing',
+  title: 'Music',
   order: 10,
-  span: 2,
-  Compact,
-  Panel,
+  slot: 'center',
+  Chip,
+  Card: MusicCard,
+  cardWidth: 320,
   poll: {
-    // Collapsed pill still shows the track, just refreshed less often.
-    interval: ({ expanded, suspended, game }) => (suspended ? null : expanded ? 1500 : game ? 5000 : 3000),
+    // Only while the bar is up; faster while the card is open.
+    interval: ({ visible, openCard, suspended, game }) =>
+      suspended || !visible ? null : openCard === 'media' ? 1500 : game ? 5000 : 3000,
     tick,
   },
   onSuspend: () => store.set(empty),

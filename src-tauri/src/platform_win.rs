@@ -1,6 +1,6 @@
 //! Windows implementation of platform.rs.
 
-use windows::Win32::Foundation::{CloseHandle, RECT};
+use windows::Win32::Foundation::{CloseHandle, HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
@@ -11,8 +11,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_RUNNING_D3D_FULL_SCREEN};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, GWL_STYLE,
-    WS_CAPTION,
+    GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
+    ShowWindow, GWL_STYLE, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION,
 };
 
 /// True only for real fullscreen: exclusive D3D fullscreen, or a borderless window covering
@@ -133,4 +133,19 @@ pub fn foreground_exe_path() -> Option<String> {
         ok.ok()?;
         Some(String::from_utf16_lossy(&buf[..len as usize]))
     }
+}
+
+/// Mouse position in physical screen pixels.
+pub fn cursor_pos() -> Option<(i32, i32)> {
+    let mut p = POINT::default();
+    unsafe { GetCursorPos(&mut p).ok()? };
+    Some((p.x, p.y))
+}
+
+/// Show without activating (so the app you're typing in keeps focus), or hide.
+pub fn show_window(hwnd: isize, show: bool) -> bool {
+    unsafe {
+        let _ = ShowWindow(HWND(hwnd as *mut core::ffi::c_void), if show { SW_SHOWNOACTIVATE } else { SW_HIDE });
+    }
+    true
 }

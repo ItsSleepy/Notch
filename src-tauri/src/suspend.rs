@@ -1,4 +1,4 @@
-//! Hides the notch and stops all polling while a fullscreen app is focused, an anti-cheat
+//! Hides the bar and stops all polling while a fullscreen app is focused, an anti-cheat
 //! game is running, or the user hid it from the tray. Also tracks "game focused" for game mode.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,15 +44,9 @@ impl SuspendState {
     }
 }
 
-/// Show/hide the window to match the current state and tell the frontend.
-fn apply(app: &AppHandle, was_suspended: bool) {
+/// Tell the frontend. The bar watcher (bar.rs) hides/shows the window itself.
+fn apply(app: &AppHandle, _was_suspended: bool) {
     let state = app.state::<SuspendState>();
-    let suspended = state.suspended();
-    if suspended != was_suspended {
-        if let Some(win) = app.get_webview_window("main") {
-            let _ = if suspended { win.hide() } else { win.show() };
-        }
-    }
     let _ = app.emit("notch://suspend", state.info());
 }
 

@@ -4,7 +4,9 @@ import { createStore, useStore } from '../../core/store';
 import { throttled } from '../../core/throttle';
 import { Slider } from '../../core/Slider';
 import { IconChevron, IconVolume } from '../../core/icons';
-import type { WidgetDef } from '../../core/types';
+import type { CardProps, ChipProps, WidgetDef } from '../../core/types';
+import { Card } from '../../core/Card';
+import { openTarget } from '../../core/ipc';
 
 // Master volume, output device switcher and per-app mixer (Windows Core Audio).
 // Scrolling over the pill changes master volume and shows a volume "live activity".
@@ -149,98 +151,112 @@ function useFlashActive() {
   return Date.now() < flashUntil;
 }
 
-function VolumeOsd() {
-  const s = useStore(store);
-  const level = s.snap?.master ?? 0;
-  const muted = !!s.snap?.muted;
+/** Speaker icon + level; lights up while you scroll the volume on the bar. */
+function Chip({ open }: ChipProps) {
+  const { snap } = useStore(store);
+  const flashing = useFlashActive();
+  const level = snap?.master ?? 0;
+  const muted = !!snap?.muted;
   return (
-    <div className="osd">
-      <IconVolume size={15} level={level} muted={muted} />
-      <div className="osd-bar">
-        <div style={{ width: `${muted ? 0 : level * 100}%` }} />
-      </div>
-      <span className="osd-pct">{muted ? 'Muted' : Math.round(level * 100)}</span>
-    </div>
+    <span className={`chip vol-chip${open ? ' on' : ''}${flashing ? ' flash' : ''}`}>
+      <IconVolume size={14} level={level} muted={muted} />
+      {flashing ? (
+        <span className="vol-mini">
+          <span style={{ width: `${muted ? 0 : level * 100}%` }} />
+        </span>
+      ) : null}
+      <span className="num">{snap ? (muted ? 'Muted' : `${Math.round(level * 100)}%`) : ''}</span>
+    </span>
   );
 }
 
-function Panel() {
+function SoundCard({ openSettings }: CardProps) {
   const { snap } = useStore(store);
   const [appsOpen, setAppsOpen] = useState(false);
-
-  if (!snap) return <div className="muted small pad">Reading audio devices…</div>;
+  const current = snap?.devices.find((d) => d.isDefault);
 
   return (
-    <div className="audio">
-      <div className="a-row">
-        <button
-          className="icon-btn a-mute"
-          onClick={toggleMasterMute}
-          aria-label={snap.muted ? 'Unmute' : 'Mute'}
-        >
-          <IconVolume level={snap.master} muted={snap.muted} />
-        </button>
-        <Slider label="Master volume" value={snap.muted ? 0 : snap.master} onChange={setMaster} />
-        <span className="a-pct">{snap.muted ? '–' : Math.round(snap.master * 100)}</span>
-      </div>
-
-      {snap.devices.length > 1 && (
-        <div className="a-devices">
-          {snap.devices.map((d) => (
-            <button
-              key={d.id}
-              className={`chip${d.isDefault ? ' on' : ''}`}
-              title={d.name}
-              onClick={() => !d.isDefault && setDevice(d.id)}
-            >
-              {prettyDevice(d.name)}
+    <Card
+      icon={<IconVolume size={15} level={snap?.master ?? 1} muted={snap?.muted} />}
+      tone="purple"
+      title="Sound"
+      subtitle={current ? prettyDevice(current.name) : 'Output'}
+      value={snap ? (snap.muted ? '–' : Math.round(snap.master * 100)) : undefined}
+      unit={snap && !snap.muted ? '%' : undefined}
+      action={{ label: 'Sound settings', onClick: () => openTarget('sound') }}
+      openSettings={openSettings}
+    >
+      {!snap ? (
+        <div className="panel muted small">Reading audio devices…</div>
+      ) : (
+        <div className="panel audio">
+          <div className="a-row">
+            <button className="icon-btn a-mute" onClick={toggleMasterMute} aria-label={snap.muted ? 'Unmute' : 'Mute'}>
+              <IconVolume level={snap.master} muted={snap.muted} />
             </button>
-          ))}
+            <Slider label="Master volume" value={snap.muted ? 0 : snap.master} onChange={setMaster} />
+          </div>
+
+          {snap.devices.length > 1 && (
+            <div className="a-devices">
+              {snap.devices.map((d) => (
+                <button
+                  key={d.id}
+                  className={`pill-btn${d.isDefault ? ' on' : ''}`}
+                  title={d.name}
+                  onClick={() => !d.isDefault && setDevice(d.id)}
+                >
+                  {prettyDevice(d.name)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {snap.apps.length > 0 && (
+            <>
+              <button className="a-toggle" onClick={() => setAppsOpen((o) => !o)}>
+                <span>Apps</span>
+                <span className="muted">{snap.apps.length}</span>
+                <IconChevron open={appsOpen} />
+              </button>
+              {appsOpen &&
+                snap.apps.map((a) => (
+                  <div className="a-row a-app" key={a.pid}>
+                    <button
+                      className={`icon-btn a-mute${a.muted ? ' off' : ''}`}
+                      onClick={() => toggleAppMute(a.pid, !a.muted)}
+                      aria-label={`${a.muted ? 'Unmute' : 'Mute'} ${prettyExe(a.exe)}`}
+                    >
+                      <IconVolume size={14} level={a.volume} muted={a.muted} />
+                    </button>
+                    <span className={`a-name${a.active ? ' live' : ''}`} title={a.exe}>
+                      {prettyExe(a.exe)}
+                    </span>
+                    <Slider label={`${prettyExe(a.exe)} volume`} value={a.muted ? 0 : a.volume} onChange={(v) => setApp(a.pid, v)} />
+                    <span className="a-pct">{a.muted ? '–' : Math.round(a.volume * 100)}</span>
+                  </div>
+                ))}
+            </>
+          )}
         </div>
       )}
-
-      {snap.apps.length > 0 && (
-        <>
-          <button className="a-toggle" onClick={() => setAppsOpen((o) => !o)}>
-            <span>Apps</span>
-            <span className="muted">{snap.apps.length}</span>
-            <IconChevron open={appsOpen} />
-          </button>
-          {appsOpen &&
-            snap.apps.map((a) => (
-              <div className="a-row a-app" key={a.pid}>
-                <button
-                  className={`icon-btn a-mute${a.muted ? ' off' : ''}`}
-                  onClick={() => toggleAppMute(a.pid, !a.muted)}
-                  aria-label={`${a.muted ? 'Unmute' : 'Mute'} ${prettyExe(a.exe)}`}
-                >
-                  <IconVolume size={14} level={a.volume} muted={a.muted} />
-                </button>
-                <span className={`a-name${a.active ? ' live' : ''}`} title={a.exe}>
-                  {prettyExe(a.exe)}
-                </span>
-                <Slider label={`${prettyExe(a.exe)} volume`} value={a.muted ? 0 : a.volume} onChange={(v) => setApp(a.pid, v)} />
-                <span className="a-pct">{a.muted ? '–' : Math.round(a.volume * 100)}</span>
-              </div>
-            ))}
-        </>
-      )}
-    </div>
+    </Card>
   );
 }
 
 export const audioWidget: WidgetDef = {
   id: 'audio',
-  title: 'Audio',
-  order: 15,
-  span: 2,
-  Panel,
-  activity: { useActive: useFlashActive, Compact: VolumeOsd },
+  title: 'Sound',
+  order: 40,
+  slot: 'right',
+  Chip,
+  Card: SoundCard,
+  cardWidth: 320,
   onWheel: (deltaY) => {
     onWheel(deltaY);
   },
   poll: {
-    interval: ({ expanded, suspended }) => (expanded && !suspended ? 1500 : null),
+    interval: ({ visible, openCard, suspended }) => (suspended || !visible ? null : openCard === 'audio' ? 1500 : 5000),
     tick,
   },
 };

@@ -13,6 +13,10 @@ let config = {
   anticheatProcesses: ['EasyAntiCheat.exe', 'BEService.exe', 'VALORANT-Win64-Shipping.exe'],
   suspendOnFullscreen: true,
   hoverExpand: true,
+  autoHide: true,
+  revealDelayMs: 250,
+  calendarUrls: ['https://calendar.google.com/calendar/ical/example/basic.ics'],
+  clock24h: true,
   gameMode: true,
   gameProcesses: ['javaw.exe', 'Minecraft.Windows.exe'],
   lhmEnabled: false,
@@ -34,6 +38,30 @@ const audio = {
     { pid: 0, exe: 'System sounds', volume: 0.5, muted: false, active: false },
   ],
 };
+
+/** Events don't exist outside Tauri; the sandbox just never fires them. */
+export async function mockListen(_event: string, _cb: (payload: unknown) => void): Promise<() => void> {
+  return () => {};
+}
+
+function mockCalendar() {
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+  const at = (d: number, h: number, m = 0) => day.getTime() + d * 86400000 + (h * 60 + m) * 60000;
+  const now = Date.now();
+  const soon = Math.ceil((now + 9 * 60000) / 60000) * 60000;
+  return {
+    configured: true,
+    error: null,
+    fetchedAt: now,
+    events: [
+      { title: 'Release day', start: at(0, 0), end: at(1, 0), allDay: true, location: '', cal: 0 },
+      { title: 'Design review', start: soon, end: soon + 40 * 60000, allDay: false, location: '', cal: 1 },
+      { title: 'Lunch with Sam', start: soon + 3 * 3600000, end: soon + 4 * 3600000, allDay: false, location: '', cal: 2 },
+      { title: 'Yoga', start: at(1, 8), end: at(1, 9), allDay: false, location: '', cal: 1 },
+    ],
+  };
+}
 
 export async function mockCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const now = Date.now();
@@ -87,6 +115,10 @@ export async function mockCall<T>(cmd: string, args?: Record<string, unknown>): 
     case 'set_config':
       config = args?.config as typeof config;
       return r(undefined);
+    case 'calendar_events':
+      return r(mockCalendar());
+    case 'bar_visible':
+      return r(true);
     case 'get_suspend':
       return r({ fullscreen: false, anticheat: false, userHidden: false, game: false });
     case 'audio_snapshot':

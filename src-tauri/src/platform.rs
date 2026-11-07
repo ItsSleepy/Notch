@@ -17,9 +17,17 @@ mod imp {
     pub fn foreground_exe_path() -> Option<String> {
         None
     }
+
+    pub fn cursor_pos() -> Option<(i32, i32)> {
+        None
+    }
+
+    pub fn show_window(_hwnd: isize, _show: bool) -> bool {
+        false
+    }
 }
 
-pub use imp::{any_process_running, foreground_exe_path, is_fullscreen_app};
+pub use imp::{any_process_running, cursor_pos, foreground_exe_path, is_fullscreen_app, show_window};
 
 /// Folders that only ever contain games. Matching the focused exe against these catches
 /// almost every Steam/Epic/Riot/Xbox/GOG/EA/Ubisoft title without a manual list.

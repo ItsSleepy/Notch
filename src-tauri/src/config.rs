@@ -12,8 +12,17 @@ pub struct Config {
     /// Process names that trigger a full suspend (case-insensitive, e.g. "EasyAntiCheat.exe").
     pub anticheat_processes: Vec<String>,
     pub suspend_on_fullscreen: bool,
+    /// Open a card when hovering its item in the bar (otherwise click it).
     pub hover_expand: bool,
-    /// Shrink to a minimal pill and disable hover while a game is focused (windowed/borderless).
+    /// Keep the bar hidden until the mouse is pushed against the top edge of the screen.
+    pub auto_hide: bool,
+    /// How long the mouse has to rest on the top edge before the bar appears.
+    pub reveal_delay_ms: u64,
+    /// iCal feed links (e.g. Google Calendar's "Secret address in iCal format").
+    pub calendar_urls: Vec<String>,
+    /// 24-hour clock in the bar.
+    pub clock_24h: bool,
+    /// While a game is focused (windowed/borderless): slower polling and a longer reveal delay.
     pub game_mode: bool,
     /// Extra game exes on top of the auto-detected game library folders.
     pub game_processes: Vec<String>,
@@ -43,6 +52,10 @@ impl Default for Config {
             .collect(),
             suspend_on_fullscreen: true,
             hover_expand: true,
+            auto_hide: true,
+            reveal_delay_ms: 250,
+            calendar_urls: Vec::new(),
+            clock_24h: true,
             game_mode: true,
             // Minecraft isn't installed in a game library folder.
             game_processes: ["javaw.exe", "Minecraft.Windows.exe"]
