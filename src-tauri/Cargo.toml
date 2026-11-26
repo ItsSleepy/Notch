@@ -1,6 +1,6 @@
 [package]
 name = "notch"
-version = "0.2.0"
+version = "0.3.0"
 description = "An auto-hiding top bar for Windows"
 authors = ["Isaac"]
 edition = "2021"
@@ -23,6 +23,9 @@ raw-window-handle = "0.6"
 chrono = "0.4"
 chrono-tz = "0.10"
 rrule = "0.14"
+tiny_http = "0.12"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+getrandom = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-core = "0.58"
@@ -44,7 +47,11 @@ windows = { version = "0.58", features = [
   "Win32_System_Variant",
   "Win32_Devices_FunctionDiscovery",
   "Win32_UI_Shell_PropertiesSystem",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_System_DataExchange",
+  "Win32_Security",
 ] }
+rfd = "0.15"
 
 [profile.release]
 opt-level = "s"

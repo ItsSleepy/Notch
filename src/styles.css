@@ -851,3 +851,159 @@ textarea {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* phone share */
+.share-chip {
+  position: relative;
+  overflow: hidden;
+}
+.share-chip.off svg {
+  opacity: 0.55;
+}
+.share-chip.dragging {
+  background: color-mix(in srgb, var(--green) 22%, transparent);
+  color: var(--green);
+}
+.share-chip .share-mini {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--green);
+  transition: width 150ms linear;
+}
+.share-ok {
+  color: var(--green);
+}
+.share-off p {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+.share-pair {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.qr {
+  flex: none;
+  width: 118px;
+  height: 118px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.qr svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.qr.empty {
+  display: grid;
+  place-items: center;
+  color: #888;
+  font-size: 11px;
+}
+.share-pair-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.share-url {
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.share-progress {
+  height: 5px;
+  border-radius: 5px;
+  background: var(--hover);
+  overflow: hidden;
+  margin: 6px 0 4px;
+}
+.share-progress i {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  transition: width 150ms linear;
+}
+.share-drop {
+  transition: border-color 120ms, background 120ms;
+}
+.share-drop.over {
+  border: 1px dashed var(--green);
+  background: color-mix(in srgb, var(--green) 10%, var(--panel));
+}
+.share-hint {
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  padding: 14px 8px;
+  text-align: center;
+  color: var(--muted);
+}
+.share-drop.over .share-hint {
+  color: var(--green);
+  border-color: transparent;
+}
+.sec-label .link.right {
+  float: right;
+  padding: 0;
+  font-size: 11px;
+}
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.share-row + .share-row {
+  border-top: 1px solid var(--line);
+}
+.share-row.clickable {
+  cursor: pointer;
+}
+.share-row.clickable:hover .share-name {
+  color: var(--blue);
+}
+.share-ico {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--hover);
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.share-meta {
+  flex: 1;
+  min-width: 0;
+}
+.share-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.share-note {
+  text-align: center;
+  margin-top: 6px;
+}
+.share-drop.over .share-hint {
+  padding: 34px 8px;
+  font-size: 14px;
+}

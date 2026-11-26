@@ -14,6 +14,7 @@ Bar items (hover to open a card, click to keep it open):
   When one finishes the bar pops down, chimes, and the item flashes.
 - **CPU**: live mini graph + %. Card: 2-minute graph, memory, GPU, network, disk, uptime.
 - **Sound**: volume. Card: master volume, output device switch, per-app mixer. Scroll anywhere on the bar to change the volume.
+- **Phone share**: send files between your phone and the PC over Wi-Fi. Card: QR to pair, files waiting for the phone, files received.
 - **Clock**, and the gear for settings.
 
 Light or dark follows your Windows app theme. Pauses for fullscreen apps and anti-cheat games, as before.
@@ -44,6 +45,18 @@ UI-only sandbox with fake data (no Rust needed): `npm run dev` and open http://l
 - Gear (right end of the bar) → settings: auto-hide on/off and how quickly it appears, hover vs click, 24-hour clock, calendar links.
 - Tray icon → *Show the bar*, *Pause / resume Notch*, *Quit*.
 - Settings are saved to `%APPDATA%\eu.isaac-dev.notch\config.json`.
+
+## Phone share
+
+Files between your phone and this PC, through the phone's browser (nothing to install on the phone).
+
+1. Phone icon on the bar → **Turn on**. Windows asks once whether Notch may use the network: allow **Private networks**.
+2. Scan the QR code with the phone camera. Add the page to the home screen so you don't need to scan again.
+3. **Phone → PC:** tap *Choose photos or files*. They're saved to `Downloads\Notch Share`, the bar pops down and the card lists them (click to open, *Show* to find it in Explorer).
+4. **PC → phone:** drag files onto the bar. The card opens; drop them and they appear on the phone page under *From PC*.
+
+Phone and PC must be on the same network. The QR holds a secret code; a paired phone keeps a cookie, and **New code** signs every phone out.
+Files offered to the phone are forgotten when Notch restarts. Rebuild after pulling changes with `build-share.bat`.
 
 ## Suspend rules
 
@@ -77,6 +90,7 @@ src/
   widgets/timers/      named countdown timers (kept in localStorage)
   widgets/system/      CPU graph chip, CPU/memory/GPU/network card
   widgets/audio/       volume chip, device switcher, per-app mixer
+  widgets/share/       phone share chip and card (QR, transfers, drag-and-drop)
   widgets/clock/       date and time
 src-tauri/src/
   lib.rs               app setup
@@ -90,6 +104,9 @@ src-tauri/src/
   audio_win.rs         Core Audio: volumes, sessions, default device
   system.rs            sysinfo + nvidia-smi + LibreHardwareMonitor
   config.rs            settings file
+  share_core.rs        phone share server (pairing, uploads, downloads); no Tauri, testable on its own
+  share.rs             phone share commands and events
+  share_page.html      the page the phone opens
 ```
 
 ## CPU temperature (optional)

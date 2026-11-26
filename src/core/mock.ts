@@ -142,6 +142,23 @@ export async function mockCall<T>(cmd: string, args?: Record<string, unknown>): 
     case 'audio_set_device':
       audio.devices.forEach((d) => (d.isDefault = d.id === args?.id));
       return r(undefined);
+    case 'share_status':
+      return r({
+        enabled: true,
+        running: true,
+        url: 'http://192.168.1.20:53117/?t=demo',
+        qrSvg:
+          '<svg xmlns="http://www.w3.org/2000/svg" width="168" height="168" viewBox="0 0 21 21"><rect width="21" height="21" fill="#fff"/><path d="M1 1h7v7H1zM13 1h7v7h-7zM1 13h7v7H1zM10 10h2v2h-2zM14 14h3v3h-3z" fill="#000"/></svg>',
+        dir: 'C:\\Users\\User\\Downloads\\Notch Share',
+        offers: [{ id: 'a1', name: 'Invoice_GMR_INV003.pdf', size: 184_000 }],
+        received: [
+          { name: 'IMG_2041.HEIC', size: 2_900_000, at: now - 120_000 },
+          { name: 'screen-recording.mp4', size: 48_000_000, at: now - 3 * 3600_000 },
+        ],
+        error: null,
+      });
+    case 'share_offer':
+      return r(1);
     default:
       return r(undefined);
   }

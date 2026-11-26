@@ -7,6 +7,9 @@ mod config;
 mod media;
 mod media_info;
 mod platform;
+mod share;
+mod share_core;
+mod share_win;
 mod suspend;
 mod system;
 mod window;
@@ -37,6 +40,16 @@ pub fn run() {
             commands::audio_set_master_mute,
             commands::audio_set_app,
             commands::audio_set_device,
+            share::share_status,
+            share::share_enable,
+            share::share_reset,
+            share::share_offer,
+            share::share_unoffer,
+            share::share_clear,
+            share::share_open,
+            share::share_pick,
+            share::share_paste,
+            share::share_elevated,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -45,6 +58,7 @@ pub fn run() {
             app.manage(system::SysState::default());
             app.manage(bar::BarState::default());
             app.manage(calendar::CalState::default());
+            app.manage(share::init(&handle));
 
             bar::init(&handle)?;
             window::build_tray(app)?;

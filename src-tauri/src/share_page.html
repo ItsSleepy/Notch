@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Notch · {{PC}}</title>
+<style>
+  :root { --bg:#000; --panel:#111114; --line:#232328; --fg:#f2f2f5; --muted:#8d8d98; --green:#3ddc6c; --blue:#4c8dff; --red:#ff6170; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 -apple-system,'Segoe UI',system-ui,sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:max(18px,env(safe-area-inset-top)) 16px 40px; }
+  .island { margin:0 auto 22px; width:max-content; max-width:100%; background:#000; border:1px solid var(--line); border-radius:999px; padding:9px 18px; display:flex; gap:10px; align-items:center; }
+  .island b { font-weight:600; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 10px var(--green); }
+  .dot.off { background:var(--red); box-shadow:0 0 10px var(--red); }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:14px; margin-bottom:14px; }
+  h2 { font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:2px 4px 12px; }
+  .send { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; width:100%; min-height:130px; border:1.5px dashed #34343c; border-radius:14px; background:#0a0a0c; color:var(--fg); font:inherit; cursor:pointer; }
+  .send:active { background:#15151a; }
+  .send svg { color:var(--green); }
+  .send small { color:var(--muted); }
+  input[type=file] { display:none; }
+  .row { display:flex; align-items:center; gap:12px; padding:10px 4px; border-top:1px solid var(--line); }
+  .row:first-of-type { border-top:0; }
+  .ico { flex:none; width:36px; height:36px; border-radius:10px; background:#1c1c22; display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; }
+  .meta { flex:1; min-width:0; }
+  .name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sub { color:var(--muted); font-size:12.5px; }
+  .bar { height:4px; border-radius:4px; background:#26262c; margin-top:6px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; background:var(--green); transition:width .15s; }
+  .row.err .sub { color:var(--red); }
+  .row.ok .sub { color:var(--green); }
+  a.get { flex:none; text-decoration:none; color:#000; background:var(--fg); border-radius:999px; padding:7px 14px; font-weight:600; font-size:13px; }
+  .empty { color:var(--muted); text-align:center; padding:14px 0 6px; font-size:13.5px; }
+  footer { text-align:center; color:#55555e; font-size:12px; margin-top:20px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="island"><span class="dot" id="dot"></span><span id="state">Connected to <b>{{PC}}</b></span></div>
+
+  <section>
+    <h2>Send to PC</h2>
+    <label class="send" for="pick">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.5a1 1 0 0 1 .7.3l4.5 4.5a1 1 0 1 1-1.4 1.4L13 6.9V15a1 1 0 1 1-2 0V6.9L8.2 9.7a1 1 0 0 1-1.4-1.4l4.5-4.5a1 1 0 0 1 .7-.3zM5 14a1 1 0 0 1 1 1v3h12v-3a1 1 0 1 1 2 0v3.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5V15a1 1 0 0 1 1-1z"/></svg>
+      <span>Choose photos or files</span>
+      <small>Saved to Downloads › Notch Share</small>
+    </label>
+    <input id="pick" type="file" multiple>
+    <div id="up"></div>
+  </section>
+
+  <section>
+    <h2>From PC</h2>
+    <div id="offers"><div class="empty">Drop a file on the Notch bar to send it here.</div></div>
+  </section>
+
+  <footer>Only works on the same Wi-Fi as your PC.</footer>
+</main>
+<script>
+(function () {
+  var T = '{{TOKEN}}';
+  try { localStorage.setItem('nt', T); } catch (_) {}
+  // Take the code out of the address bar (and so out of history and screenshots).
+  if (location.search) history.replaceState(null, '', '/');
+  var H = { 'X-Notch': '1', 'X-Token': T };
+  var up = document.getElementById('up');
+  var offersEl = document.getElementById('offers');
+  var dot = document.getElementById('dot');
+  var state = document.getElementById('state');
+  function setState(ok) {
+    dot.className = ok ? 'dot' : 'dot off';
+    state.firstChild.textContent = ok ? 'Connected to ' : "Can't reach ";
+  }
+  var queue = [], busy = false;
+
+  function size(b) {
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB';
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024) return Math.round(b / 1024) + ' KB';
+    return b + ' B';
+  }
+  function ext(n) { var i = n.lastIndexOf('.'); return i > 0 ? n.slice(i + 1, i + 5) : 'file'; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function row(name, sub) {
+    var r = el('div', 'row');
+    r.appendChild(el('div', 'ico', ext(name)));
+    var m = el('div', 'meta');
+    m.appendChild(el('div', 'name', name));
+    var s = el('div', 'sub', sub);
+    m.appendChild(s);
+    r.appendChild(m);
+    return { row: r, meta: m, sub: s };
+  }
+
+  document.getElementById('pick').addEventListener('change', function (e) {
+    var files = Array.prototype.slice.call(e.target.files || []);
+    files.forEach(function (f) {
+      var r = row(f.name, 'Waiting… · ' + size(f.size));
+      var bar = el('div', 'bar'); var fill = el('i'); bar.appendChild(fill); r.meta.appendChild(bar);
+      up.insertBefore(r.row, up.firstChild);
+      queue.push({ file: f, r: r, fill: fill, bar: bar });
+    });
+    e.target.value = '';
+    next();
+  });
+
+  function next() {
+    if (busy || !queue.length) return;
+    busy = true;
+    var job = queue.shift();
+    var x = new XMLHttpRequest();
+    x.open('POST', '/api/upload');
+    x.setRequestHeader('X-Notch', '1');
+    x.setRequestHeader('X-Token', T);
+    x.setRequestHeader('X-Name', encodeURIComponent(job.file.name));
+    x.setRequestHeader('Content-Type', 'application/octet-stream');
+    x.upload.onprogress = function (ev) {
+      if (!ev.lengthComputable) return;
+      var p = ev.loaded / ev.total;
+      job.fill.style.width = (p * 100).toFixed(1) + '%';
+      job.r.sub.textContent = Math.round(p * 100) + '% · ' + size(ev.loaded) + ' of ' + size(ev.total);
+    };
+    function done(ok, msg) {
+      job.bar.remove();
+      job.r.row.className = 'row ' + (ok ? 'ok' : 'err');
+      job.r.sub.textContent = msg;
+      busy = false; next();
+    }
+    x.onload = function () {
+      if (x.status === 200) {
+        var saved = job.file.name;
+        try { saved = JSON.parse(x.responseText).name; } catch (_) {}
+        done(true, 'Saved on PC' + (saved !== job.file.name ? ' as ' + saved : '') + ' · ' + size(job.file.size));
+      } else if (x.status === 401) {
+        done(false, 'Not paired. Scan the QR code in Notch again.');
+      } else {
+        done(false, 'Failed: ' + (x.responseText || x.status));
+      }
+    };
+    x.onerror = function () { done(false, 'Lost connection to the PC'); };
+    x.send(job.file);
+  }
+
+  var lastList = '';
+  function refresh() {
+    if (document.hidden) return;
+    fetch('/api/list', { headers: H, cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw r.status;
+      return r.json();
+    }).then(function (d) {
+      setState(true);
+      var key = JSON.stringify(d.offers);
+      if (key === lastList) return;
+      lastList = key;
+      offersEl.textContent = '';
+      if (!d.offers.length) {
+        offersEl.appendChild(el('div', 'empty', 'Drop a file on the Notch bar to send it here.'));
+        return;
+      }
+      d.offers.forEach(function (o) {
+        var r = row(o.name, size(o.size));
+        var a = el('a', 'get', 'Save');
+        a.href = '/f/' + encodeURIComponent(o.id) + '?t=' + T;
+        a.setAttribute('download', o.name);
+        r.row.appendChild(a);
+        offersEl.appendChild(r.row);
+      });
+    }).catch(function () { setState(false); });
+  }
+  refresh();
+  setInterval(refresh, 2500);
+  document.addEventListener('visibilitychange', refresh);
+})();
+</script>
+</body>
+</html>

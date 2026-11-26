@@ -5,6 +5,7 @@ import { audioWidget } from './audio';
 import { calendarWidget } from './calendar';
 import { clockWidget } from './clock';
 import { mediaWidget } from './media';
+import { shareWidget } from './share';
 import { systemWidget } from './system';
 import { timersWidget } from './timers';
 
@@ -12,5 +13,6 @@ registerWidget(calendarWidget);
 registerWidget(mediaWidget);
 registerWidget(timersWidget);
 registerWidget(systemWidget);
+registerWidget(shareWidget);
 registerWidget(audioWidget);
 registerWidget(clockWidget);

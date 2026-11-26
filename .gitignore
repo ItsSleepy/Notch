@@ -3,4 +3,6 @@ dist
 src-tauri/target
 src-tauri/gen
 *.log
-_backup-before-topbar
+_backup-*
+battery-probe
+*.exe

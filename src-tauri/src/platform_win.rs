@@ -9,10 +9,12 @@ use windows::core::PWSTR;
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_RUNNING_D3D_FULL_SCREEN};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
-    ShowWindow, GWL_STYLE, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION,
+    GetClassNameW, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetSystemMetrics, GetWindowLongW, GetWindowRect,
+    GetWindowThreadProcessId, ShowWindow, GUITHREADINFO, GUI_INMOVESIZE, GWL_STYLE, SM_SWAPBUTTON, SW_HIDE,
+    SW_SHOWNOACTIVATE, WS_CAPTION,
 };
 
 /// True only for real fullscreen: exclusive D3D fullscreen, or a borderless window covering
@@ -148,4 +150,22 @@ pub fn show_window(hwnd: isize, show: bool) -> bool {
         let _ = ShowWindow(HWND(hwnd as *mut core::ffi::c_void), if show { SW_SHOWNOACTIVATE } else { SW_HIDE });
     }
     true
+}
+
+/// The primary mouse button is held (respects swapped buttons). Used to spot a file being dragged.
+pub fn primary_button_down() -> bool {
+    unsafe {
+        let vk = if GetSystemMetrics(SM_SWAPBUTTON) != 0 { VK_RBUTTON } else { VK_LBUTTON };
+        (GetAsyncKeyState(vk.0 as i32) as u16 & 0x8000) != 0
+    }
+}
+
+/// A window is being moved or resized (e.g. dragged to the top edge to snap), which isn't a file drag.
+pub fn moving_window() -> bool {
+    unsafe {
+        let fg = GetForegroundWindow();
+        let tid = GetWindowThreadProcessId(fg, None);
+        let mut info = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+        GetGUIThreadInfo(tid, &mut info).is_ok() && (info.flags & GUI_INMOVESIZE).0 != 0
+    }
 }

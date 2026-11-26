@@ -18,6 +18,9 @@ import {
 } from './core/ipc';
 import { Settings } from './core/Settings';
 import { IconGear } from './core/icons';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { listen } from '@tauri-apps/api/event';
+import { dropFailed, offerFiles, setShareDragging } from './widgets/share';
 
 const CARD_GAP = 6; // space between the bar and a card
 const CARD_SHADOW = 30; // room under a card for its shadow
@@ -99,6 +102,72 @@ export default function App() {
     }).then((f) => offs.push(f));
     return () => offs.forEach((f) => f());
   }, [close]);
+
+  // Dragging files to the top of the screen opens Phone share; dropping them offers them to the
+  // phone. Notch spots the drag itself (bar://drag: mouse held since outside the bar, now at the
+  // top edge) because a drag doesn't deliver hover events. The card is unpinned after, so the bar
+  // hides once the mouse moves away (a drop doesn't give the window focus).
+  useEffect(() => {
+    if (!inTauri) return;
+    const offs: Array<() => void> = [];
+    let alive = true;
+    let unpin: number | undefined;
+    let dropSeen = false;
+    let native = false; // a drag Notch itself spotted (ends with bar://drag-end)
+    const keep = (f: () => void) => (alive ? offs.push(f) : f());
+    const unpinSoon = (ms: number) => {
+      window.clearTimeout(unpin);
+      unpin = window.setTimeout(() => {
+        if (openRef.current !== 'share' || !pinnedRef.current) return;
+        pinnedRef.current = false;
+        setPinned(false);
+        barSetHold(false).catch(() => {});
+      }, ms);
+    };
+    const startDrag = () => {
+      window.clearTimeout(unpin);
+      dropSeen = false;
+      setShareDragging(true);
+      if (openRef.current !== 'share' || !pinnedRef.current) open('share', true);
+    };
+    listen('bar://drag', () => {
+      native = true;
+      startDrag();
+    })
+      .then(keep)
+      .catch(() => {});
+    listen<boolean>('bar://drag-end', ({ payload: over }) => {
+      // Give the drop event a moment to arrive before deciding it never will.
+      native = false;
+      window.setTimeout(() => {
+        setShareDragging(false);
+        if (over && !dropSeen) dropFailed();
+        unpinSoon(over ? 2500 : 500);
+      }, 600);
+    })
+      .then(keep)
+      .catch(() => {});
+    getCurrentWebview()
+      .onDragDropEvent(({ payload }) => {
+        if (payload.type === 'enter') startDrag();
+        else if (payload.type === 'drop') {
+          dropSeen = true;
+          setShareDragging(false);
+          if (payload.paths.length) offerFiles(payload.paths);
+          unpinSoon(2500);
+        } else if (payload.type === 'leave' && !native) {
+          setShareDragging(false);
+          unpinSoon(600);
+        }
+      })
+      .then(keep)
+      .catch(() => {});
+    return () => {
+      alive = false;
+      window.clearTimeout(unpin);
+      offs.forEach((f) => f());
+    };
+  }, [open]);
 
   // Clicking into another app closes a pinned card.
   useEffect(() => {

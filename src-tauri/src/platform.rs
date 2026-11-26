@@ -25,9 +25,17 @@ mod imp {
     pub fn show_window(_hwnd: isize, _show: bool) -> bool {
         false
     }
+
+    pub fn primary_button_down() -> bool {
+        false
+    }
+
+    pub fn moving_window() -> bool {
+        false
+    }
 }
 
-pub use imp::{any_process_running, cursor_pos, foreground_exe_path, is_fullscreen_app, show_window};
+pub use imp::{any_process_running, cursor_pos, foreground_exe_path, is_fullscreen_app, moving_window, primary_button_down, show_window};
 
 /// Folders that only ever contain games. Matching the focused exe against these catches
 /// almost every Steam/Epic/Riot/Xbox/GOG/EA/Ubisoft title without a manual list.

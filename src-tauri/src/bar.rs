@@ -182,6 +182,11 @@ pub fn spawn_watcher(app: AppHandle) {
         let mut away_for = Duration::ZERO;
         let mut config = app.state::<ConfigState>().get();
         let mut config_age = Duration::ZERO;
+        // File drags: a press that started outside the bar, still held, reaching the top edge.
+        // While one is in progress the bar stays open so the file can be dropped on it.
+        let mut button_was_down = false;
+        let mut press_outside = false;
+        let mut drag_armed = false;
 
         loop {
             std::thread::sleep(TICK);
@@ -227,6 +232,27 @@ pub fn spawn_watcher(app: AppHandle) {
             let Some((x, y)) = platform::cursor_pos() else { continue };
             let monitor = *state.monitor.lock().unwrap();
             let at_top = y <= monitor.top && x >= monitor.left && x < monitor.right;
+
+            let down = platform::primary_button_down();
+            if down && !button_was_down {
+                press_outside = !(visible && state.window.lock().unwrap().contains(x, y));
+            }
+            button_was_down = down;
+            if !drag_armed && down && press_outside && at_top && !platform::moving_window() {
+                drag_armed = true;
+                at_top_for = Duration::ZERO;
+                show(&app);
+                let _ = app.emit("bar://drag", ());
+            }
+            if drag_armed {
+                if !down {
+                    drag_armed = false;
+                    let over = state.window.lock().unwrap().contains(x, y);
+                    let _ = app.emit("bar://drag-end", over);
+                }
+                away_for = Duration::ZERO;
+                continue;
+            }
 
             if !visible {
                 away_for = Duration::ZERO;
